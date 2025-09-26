@@ -1,16 +1,9 @@
-import mongoose from 'mongoose';
-
-const ItemSchema = new mongoose.Schema({
-  product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
-  quantity: Number,
-  price: Number,
-});
+import mongoose from "mongoose";
 
 const CheckoutSchema = new mongoose.Schema({
-  items: [ItemSchema],
+  items: [{ productId: String, name: String, price: Number, qty: Number }],
   total: Number,
-  status: { type: String, enum: ['pending','paid'], default: 'pending' },
-  createdAt: { type: Date, default: Date.now },
+  status: { type: String, default: "PENDING" },
 });
 
-export default mongoose.models.Checkout || mongoose.model('Checkout', CheckoutSchema);
+export default mongoose.models.Checkout || mongoose.model("Checkout", CheckoutSchema);

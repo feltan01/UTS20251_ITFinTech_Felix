@@ -1,17 +1,18 @@
-import dbConnect from '../../lib/mongodb';
-import Product from '../../models/Product';
+import dbConnect from "../../lib/mongodb";
+import Product from "../../models/Product"; // pastikan model Product sudah ada
 
 export default async function handler(req, res) {
   await dbConnect();
-  if (req.method === 'GET') {
-    const products = await Product.find({});
-    return res.status(200).json(products);
+
+  if (req.method === "GET") {
+    try {
+      const products = await Product.find({}); // ambil semua products
+      return res.status(200).json(products);
+    } catch (err) {
+      console.error("Error fetching products:", err);
+      return res.status(500).json({ error: "Gagal mengambil products", message: err.message });
+    }
   }
-  if (req.method === 'POST') {
-    const { name, price, category, stock, image } = req.body;
-    if (!name || !price) return res.status(400).json({ error: 'name & price required' });
-    const prod = await Product.create({ name, price, category, stock, image });
-    return res.status(201).json(prod);
-  }
-  res.status(405).end();
+
+  return res.status(405).json({ error: "Method not allowed" });
 }

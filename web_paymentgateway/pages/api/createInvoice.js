@@ -32,6 +32,7 @@ export default async function handler(req, res) {
       invoiceUrl: invoice.invoiceUrl, // ini yang frontend pakai
       externalId: invoice.externalId,
       id: invoice.id,
+      
     });
   } catch (err) {
     console.error("❌ Error create invoice:", err.response?.data || err);

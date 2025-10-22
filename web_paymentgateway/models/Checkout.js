@@ -1,12 +1,10 @@
 import mongoose from "mongoose";
 
 const CheckoutSchema = new mongoose.Schema({
-  external_id: { type: String, required: true },
-  user_id: { type: String, required: true },
-  amount: { type: Number, required: true },
+  items: { type: Array, required: true },
+  total: { type: Number, required: true },
   status: { type: String, default: "PENDING" },
-  payment_method: { type: String },
-  paid_at: { type: Date },
+  email: { type: String },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now },
 });

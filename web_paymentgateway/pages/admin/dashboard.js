@@ -59,27 +59,26 @@ export default function AdminDashboard() {
   };
 
   const loadOrders = async () => {
-  setOrdersLoading(true);
-  try {
-    const res = await fetch(`/api/admin/orders?_t=${Date.now()}`, {
-      method: "GET",
-      headers: {
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-      },
-    });
+    setOrdersLoading(true);
+    try {
+      const res = await fetch(`/api/admin/orders?_t=${Date.now()}`, {
+        method: "GET",
+        headers: {
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache",
+        },
+      });
 
-    if (!res.ok) throw new Error("Gagal memuat orders");
+      if (!res.ok) throw new Error("Gagal memuat orders");
 
-    const data = await res.json();
-    setOrders(data.orders || data || []);
-  } catch (error) {
-    console.error("❌ Error loading orders:", error);
-  } finally {
-    setOrdersLoading(false);
-  }
-};
-
+      const data = await res.json();
+      setOrders(data.orders || data || []);
+    } catch (error) {
+      console.error("❌ Error loading orders:", error);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
 
   const loadProducts = async () => {
     setProductsLoading(true);
@@ -236,7 +235,6 @@ export default function AdminDashboard() {
           <div className="header-content">
             <div>
               <h1>📊 Admin Dashboard</h1>
-              
             </div>
             <Link href="/">
               <button className="btn-back">← Kembali ke Home</button>
@@ -537,28 +535,78 @@ export default function AdminDashboard() {
                   <h3>📊 Penjualan Harian (7 Hari Terakhir)</h3>
                   <div className="chart-placeholder">
                     {analytics.dailyStats.length > 0 ? (
-                      <div className="bar-chart">
-                        {analytics.dailyStats.map((stat, idx) => {
-                          const maxRevenue = Math.max(...analytics.dailyStats.map(s => s.revenue));
-                          const height = maxRevenue > 0 ? (stat.revenue / maxRevenue) * 100 : 0;
-                          return (
-                            <div key={idx} className="bar-item">
-                              <div
-                                className="bar"
-                                style={{ height: `${Math.max(height, 10)}%` }}
-                                title={`Revenue: ${formatCurrency(stat.revenue)}`}
-                              >
-                                {stat.revenue > 0 && (
-                                  <span className="bar-label">
-                                    {stat.revenue >= 1000000 ? `${(stat.revenue/1000000).toFixed(1)}jt` : `${(stat.revenue/1000).toFixed(0)}rb`}
-                                  </span>
-                                )}
+                      <div className="line-chart-container">
+                        <svg className="line-chart" viewBox="0 0 800 300" preserveAspectRatio="none">
+                          <defs>
+                            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor="#667eea" stopOpacity="0.3" />
+                              <stop offset="100%" stopColor="#764ba2" stopOpacity="0.05" />
+                            </linearGradient>
+                          </defs>
+                          
+                          {(() => {
+                            const maxRevenue = Math.max(...analytics.dailyStats.map(s => s.revenue));
+                            const padding = 20;
+                            const chartHeight = 300 - padding * 2;
+                            const chartWidth = 800;
+                            const pointSpacing = chartWidth / (analytics.dailyStats.length - 1 || 1);
+                            
+                            const points = analytics.dailyStats.map((stat, idx) => {
+                              const x = idx * pointSpacing;
+                              const y = padding + chartHeight - (stat.revenue / maxRevenue * chartHeight);
+                              return { x, y, stat };
+                            });
+                            
+                            const pathD = points.map((p, i) => 
+                              `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`
+                            ).join(' ');
+                            
+                            const areaD = `${pathD} L ${points[points.length - 1].x},${300} L 0,${300} Z`;
+                            
+                            return (
+                              <>
+                                <path d={areaD} fill="url(#lineGradient)" />
+                                <path 
+                                  d={pathD} 
+                                  fill="none" 
+                                  stroke="#667eea" 
+                                  strokeWidth="3" 
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                                {points.map((point, idx) => (
+                                  <g key={idx}>
+                                    <circle 
+                                      cx={point.x} 
+                                      cy={point.y} 
+                                      r="6" 
+                                      fill="white" 
+                                      stroke="#667eea" 
+                                      strokeWidth="3"
+                                      className="chart-point"
+                                    />
+                                  </g>
+                                ))}
+                              </>
+                            );
+                          })()}
+                        </svg>
+                        
+                        <div className="chart-labels">
+                          {analytics.dailyStats.map((stat, idx) => (
+                            <div key={idx} className="chart-label-item">
+                              <div className="label-date">{stat.date}</div>
+                              <div className="label-revenue">
+                                {stat.revenue >= 1000000 
+                                  ? `${(stat.revenue/1000000).toFixed(1)}jt` 
+                                  : stat.revenue >= 1000
+                                  ? `${(stat.revenue/1000).toFixed(0)}rb`
+                                  : formatCurrency(stat.revenue)}
                               </div>
-                              <span className="bar-date">{stat.date}</span>
-                              <span className="bar-orders">{stat.paidOrders || 0} orders</span>
+                              <div className="label-orders">{stat.paidOrders || 0} orders</div>
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <p className="empty-chart">Belum ada data penjualan</p>
@@ -1117,15 +1165,19 @@ export default function AdminDashboard() {
 
         .chart-placeholder {
           min-height: 300px;
+          background: linear-gradient(135deg, #fafbfc 0%, #ffffff 100%);
+          border-radius: 12px;
+          padding: 1rem;
         }
 
         .bar-chart {
           display: flex;
           align-items: flex-end;
           justify-content: space-between;
-          height: 300px;
-          gap: 0.5rem;
-          padding: 1rem 0;
+          height: 320px;
+          gap: 0.75rem;
+          padding: 2rem 0.5rem 0 0.5rem;
+          position: relative;
         }
 
         .bar-item {
@@ -1134,79 +1186,161 @@ export default function AdminDashboard() {
           flex-direction: column;
           align-items: center;
           gap: 0.5rem;
+          min-width: 60px;
         }
 
         .bar {
           width: 100%;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          border-radius: 8px 8px 0 0;
+          background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+          border-radius: 12px 12px 4px 4px;
           position: relative;
-          transition: all 0.3s;
+          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
           cursor: pointer;
-          min-height: 20px;
+          min-height: 30px;
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+          padding-top: 0.5rem;
         }
 
         .bar:hover {
-          opacity: 0.8;
+          transform: translateY(-4px);
+          box-shadow: 0 8px 20px rgba(102, 126, 234, 0.35);
+          background: linear-gradient(180deg, #764ba2 0%, #667eea 100%);
         }
 
         .bar-label {
-          position: absolute;
-          top: -25px;
-          left: 50%;
-          transform: translateX(-50%);
           font-size: 0.7rem;
-          font-weight: 600;
-          color: #495057;
+          font-weight: 700;
+          color: white;
           white-space: nowrap;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
 
         .bar-date {
           font-size: 0.75rem;
-          color: #6c757d;
+          color: #495057;
           font-weight: 600;
+          margin-top: 0.25rem;
         }
 
         .bar-orders {
           font-size: 0.7rem;
-          color: #6c757d;
+          color: #28a745;
+          font-weight: 600;
+          background: #e8f5e9;
+          padding: 0.125rem 0.5rem;
+          border-radius: 10px;
+        }
+
+        .line-chart-container {
+          position: relative;
+          width: 100%;
+          height: 100%;
+        }
+
+        .line-chart {
+          width: 100%;
+          height: 300px;
+          margin-bottom: 1rem;
+        }
+
+        .chart-point {
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+
+        .chart-point:hover {
+          r: 8;
+          filter: drop-shadow(0 4px 8px rgba(102, 126, 234, 0.4));
+        }
+
+        .chart-labels {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.5rem;
+          padding: 0 0.5rem;
+        }
+
+        .chart-label-item {
+          flex: 1;
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .label-date {
+          font-size: 0.75rem;
+          color: #495057;
+          font-weight: 600;
+        }
+
+        .label-revenue {
+          font-size: 0.8rem;
+          color: #667eea;
+          font-weight: 700;
+        }
+
+        .label-orders {
+          font-size: 0.7rem;
+          color: #28a745;
+          font-weight: 600;
+          background: #e8f5e9;
+          padding: 0.125rem 0.5rem;
+          border-radius: 10px;
+          display: inline-block;
         }
 
         .monthly-stats {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
+          gap: 0.75rem;
         }
 
         .monthly-item {
-          display: flex;
-          justify-content: space-between;
+          display: grid;
+          grid-template-columns: 120px 1fr auto;
           align-items: center;
-          padding: 1rem;
-          background: #f8f9fa;
-          border-radius: 8px;
-          transition: all 0.2s;
+          gap: 1rem;
+          padding: 1.25rem;
+          background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+          border-radius: 12px;
+          transition: all 0.3s;
+          border-left: 4px solid #667eea;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
         }
 
         .monthly-item:hover {
-          background: #e9ecef;
+          background: linear-gradient(135deg, #e3f2fd 0%, #f8f9fa 100%);
+          transform: translateX(8px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+          border-left-color: #764ba2;
         }
 
         .monthly-month {
-          font-weight: 600;
+          font-weight: 700;
           color: #212529;
-          min-width: 100px;
+          font-size: 1rem;
         }
 
         .monthly-revenue {
           font-weight: 700;
           color: #28a745;
-          font-size: 1.1rem;
+          font-size: 1.25rem;
+          text-align: right;
         }
 
         .monthly-orders {
-          font-size: 0.875rem;
-          color: #6c757d;
+          font-size: 0.8rem;
+          color: white;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          padding: 0.375rem 0.75rem;
+          border-radius: 20px;
+          font-weight: 600;
+          white-space: nowrap;
+          box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
         }
 
         .empty-chart {
@@ -1259,6 +1393,15 @@ export default function AdminDashboard() {
             overflow-x: auto;
           }
 
+          .line-chart-container {
+            overflow-x: auto;
+          }
+
+          .chart-labels {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+          }
+
           .section-header {
             flex-direction: column;
             align-items: flex-start;
@@ -1268,9 +1411,18 @@ export default function AdminDashboard() {
           .btn-primary {
             width: 100%;
           }
+
+          .monthly-item {
+            grid-template-columns: 1fr;
+            text-align: center;
+            gap: 0.5rem;
+          }
+
+          .monthly-revenue {
+            text-align: center;
+          }
         }
       `}</style>
     </>
   );
 }
-

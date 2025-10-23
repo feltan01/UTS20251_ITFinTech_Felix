@@ -183,11 +183,11 @@ export default function Home() {
           </div>
 
           <h1 className="hero-title">
-            🛒 WEB Payment Gateway
+            🛒 Felix Shop
           </h1>
           
           <p className="hero-subtitle">
-            Demo aplikasi e-commerce dengan integrasi Xendit Payment Gateway
+            Berbelanjalah disini
           </p>
         </header>
 

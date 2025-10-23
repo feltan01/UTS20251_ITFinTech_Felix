@@ -44,18 +44,84 @@ export default function SelectItems() {
     return cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   }
 
+  // ✅ FIXED: Fungsi untuk mendapatkan email user yang login
+  function getUserEmail() {
+    // 1. Coba dari localStorage (user data setelah login)
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        if (user.email) {
+          console.log("📧 Email dari localStorage:", user.email);
+          return user.email;
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ Failed to parse user from localStorage");
+    }
+
+    // 2. Coba dari sessionStorage
+    try {
+      const userData = sessionStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        if (user.email) {
+          console.log("📧 Email dari sessionStorage:", user.email);
+          return user.email;
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ Failed to parse user from sessionStorage");
+    }
+
+    // 3. Coba cari key lain yang mungkin menyimpan email
+    try {
+      const email = localStorage.getItem('userEmail') || 
+                    sessionStorage.getItem('userEmail') ||
+                    localStorage.getItem('email');
+      if (email) {
+        console.log("📧 Email dari storage:", email);
+        return email;
+      }
+    } catch (e) {
+      console.warn("⚠️ Failed to get email from storage");
+    }
+
+    console.warn("⚠️ Email tidak ditemukan");
+    return null;
+  }
+
   async function handleCheckout() {
     if (!cart.length) return;
     setCheckoutLoading(true);
     setError("");
+
+    // ✅ FIXED: Ambil email user yang benar
+    const userEmail = getUserEmail();
+    
+    if (!userEmail) {
+      setError("Silakan login terlebih dahulu");
+      setCheckoutLoading(false);
+      return;
+    }
+
+    // ✅ FIXED: Kirim hanya data yang diperlukan (name, price, qty)
+    const items = cart.map(item => ({
+      name: item.name,
+      price: item.price,
+      qty: item.qty
+    }));
+
+    console.log("🛒 Checkout items:", items);
+    console.log("📧 Email:", userEmail);
 
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: cart,
-          email: "test@example.com"
+          items: items,  // ✅ Data yang sudah dibersihkan
+          email: userEmail  // ✅ Email user yang login
         }),
       });
 
@@ -63,16 +129,16 @@ export default function SelectItems() {
 
       // ✅ FIXED: Check structure of new API response
       if (res.ok && data.success && data.checkout) {
-        // If Xendit is configured, redirect to payment_url
-        if (data.checkout.payment_url) {
-          window.location.href = data.checkout.payment_url;
+        // If Xendit is configured, redirect to invoice_url
+        if (data.checkout.invoice_url) {
+          window.location.href = data.checkout.invoice_url;
         } else {
           // Fallback: go to local checkout page (for dev without Xendit)
           window.location.href = `/checkout?id=${data.checkout._id}`;
         }
       } else {
         // Show error from API or generic message
-        setError(data.error || data.warning || "Gagal membuat checkout");
+        setError(data.error || data.hint || "Gagal membuat checkout");
       }
     } catch (err) {
       console.error(err);
@@ -111,7 +177,7 @@ export default function SelectItems() {
           </Link>
           <h1 className="page-title">
             <span className="title-icon">🛍️</span>
-            Pilih Produk
+            Felix Shop
           </h1>
         </header>
 
@@ -216,7 +282,7 @@ export default function SelectItems() {
                         </>
                       ) : (
                         <>
-                          <span>Lanjut ke Checkout</span>
+                          <span>Bayar Menggunakan Xendit</span>
                           <span className="btn-arrow">→</span>
                         </>
                       )}
@@ -230,7 +296,6 @@ export default function SelectItems() {
       </div>
 
       <style jsx>{`
-        /* ... your existing styles (unchanged) ... */
         * {
           box-sizing: border-box;
         }

@@ -1,34 +1,38 @@
-import { MongoClient } from 'mongodb';
-
-const uri = process.env.MONGODB_URI;
+import dbConnect from "../../../lib/mongodb";
+import Checkout from "../../../models/Checkout";
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  await dbConnect();
+
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const client = new MongoClient(uri);
-
   try {
-    await client.connect();
-    const db = client.db('payment_gateway');
-    const ordersCollection = db.collection('orders');
+    const orders = await Checkout.find({}).sort({ createdAt: -1 }).lean();
 
-    // Ambil semua orders, urutkan dari terbaru
-    const orders = await ordersCollection
-      .find({})
-      .sort({ createdAt: -1 })
-      .toArray();
+    const formattedOrders = orders.map(order => ({
+      _id: order._id,
+      orderId: order.external_id || order._id.toString().slice(-8),
+      customerName: order.email?.split("@")[0] || "Guest",
+      customerEmail: order.email || "N/A",
+      items: order.items || [],
+      amount: order.total || 0,
+      status: (order.status || "PENDING").toUpperCase(),
+      paymentMethod: order.payment_method || "N/A",
+      paymentUrl: order.invoice_url || null,
+      paidAt: order.paid_at || null,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+    }));
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      orders
+      orders: formattedOrders,
+      total: formattedOrders.length,
     });
-
   } catch (error) {
-    console.error('Get orders error:', error);
-    res.status(500).json({ error: 'Terjadi kesalahan server' });
-  } finally {
-    await client.close();
+    console.error("❌ Get orders error:", error);
+    return res.status(500).json({ error: error.message });
   }
 }

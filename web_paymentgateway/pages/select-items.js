@@ -55,15 +55,24 @@ export default function SelectItems() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: cart,
-          email: "test@example.com" // nanti bisa diganti pakai user login
+          email: "test@example.com"
         }),
       });
 
       const data = await res.json();
-      if (data._id) {
-        window.location.href = `/checkout?id=${data._id}`;
+
+      // ✅ FIXED: Check structure of new API response
+      if (res.ok && data.success && data.checkout) {
+        // If Xendit is configured, redirect to payment_url
+        if (data.checkout.payment_url) {
+          window.location.href = data.checkout.payment_url;
+        } else {
+          // Fallback: go to local checkout page (for dev without Xendit)
+          window.location.href = `/checkout?id=${data.checkout._id}`;
+        }
       } else {
-        setError(data.error || "Gagal membuat checkout");
+        // Show error from API or generic message
+        setError(data.error || data.warning || "Gagal membuat checkout");
       }
     } catch (err) {
       console.error(err);
@@ -221,6 +230,7 @@ export default function SelectItems() {
       </div>
 
       <style jsx>{`
+        /* ... your existing styles (unchanged) ... */
         * {
           box-sizing: border-box;
         }

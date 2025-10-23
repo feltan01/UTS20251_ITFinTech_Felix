@@ -6,13 +6,11 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders', 'products', 'analytics'
+  const [activeTab, setActiveTab] = useState('overview');
 
-  // Orders state
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // Products state
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
@@ -25,17 +23,19 @@ export default function AdminDashboard() {
     stock: ''
   });
 
-  // Analytics state
   const [analytics, setAnalytics] = useState({
     totalRevenue: 0,
     totalOrders: 0,
+    paidOrders: 0,
     pendingPayments: 0,
     dailyStats: [],
-    monthlyStats: []
+    monthlyStats: [],
+    topProducts: [],
+    conversionRate: '0%',
+    averageOrderValue: 0
   });
 
   useEffect(() => {
-    // Check if user is admin
     const storedUser = localStorage.getItem('user');
     if (!storedUser) {
       router.push('/');
@@ -51,33 +51,43 @@ export default function AdminDashboard() {
 
     setUser(userData);
     setLoading(false);
-    loadOrders();
-    loadProducts();
-    loadAnalytics();
+    loadAllData();
   }, []);
 
-  const loadOrders = async () => {
-    setOrdersLoading(true);
-    try {
-      const res = await fetch('/api/admin/orders');
-      const data = await res.json();
-      if (res.ok) {
-        setOrders(data.orders || []);
-      }
-    } catch (error) {
-      console.error('Error loading orders:', error);
-    } finally {
-      setOrdersLoading(false);
-    }
+  const loadAllData = async () => {
+    await Promise.all([loadOrders(), loadProducts(), loadAnalytics()]);
   };
+
+  const loadOrders = async () => {
+  setOrdersLoading(true);
+  try {
+    const res = await fetch(`/api/admin/orders?_t=${Date.now()}`, {
+      method: "GET",
+      headers: {
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+      },
+    });
+
+    if (!res.ok) throw new Error("Gagal memuat orders");
+
+    const data = await res.json();
+    setOrders(data.orders || data || []);
+  } catch (error) {
+    console.error("❌ Error loading orders:", error);
+  } finally {
+    setOrdersLoading(false);
+  }
+};
+
 
   const loadProducts = async () => {
     setProductsLoading(true);
     try {
       const res = await fetch('/api/admin/products');
       const data = await res.json();
-      if (res.ok) {
-        setProducts(data.products || []);
+      if (res.ok && data.products) {
+        setProducts(data.products);
       }
     } catch (error) {
       console.error('Error loading products:', error);
@@ -100,18 +110,20 @@ export default function AdminDashboard() {
 
   const handleProductSubmit = async (e) => {
     e.preventDefault();
-    const endpoint = editingProduct 
-      ? `/api/admin/products/${editingProduct._id}`
-      : '/api/admin/products';
-    
-    const method = editingProduct ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(endpoint, {
+      const url = editingProduct 
+        ? `/api/admin/products/${editingProduct._id}`
+        : '/api/admin/products';
+      
+      const method = editingProduct ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(productForm)
       });
+
+      const data = await res.json();
 
       if (res.ok) {
         alert(editingProduct ? '✅ Produk berhasil diupdate!' : '✅ Produk berhasil ditambahkan!');
@@ -121,7 +133,6 @@ export default function AdminDashboard() {
         loadProducts();
         loadAnalytics();
       } else {
-        const data = await res.json();
         alert('❌ ' + (data.error || 'Gagal menyimpan produk'));
       }
     } catch (error) {
@@ -135,8 +146,8 @@ export default function AdminDashboard() {
       name: product.name,
       price: product.price,
       description: product.description,
-      image: product.image,
-      stock: product.stock
+      image: product.image || '',
+      stock: product.stock || 0
     });
     setShowProductForm(true);
   };
@@ -179,11 +190,41 @@ export default function AdminDashboard() {
     });
   };
 
+  const getStatusBadge = (status) => {
+    const normalized = status?.toUpperCase() || 'PENDING';
+    
+    if (normalized === 'PAID') {
+      return { text: '✅ Lunas', class: 'status-paid' };
+    }
+    return { text: '⏳ Menunggu Pembayaran', class: 'status-pending' };
+  };
+
   if (loading) {
     return (
       <div className="loading-screen">
         <div className="spinner"></div>
         <p>Loading...</p>
+        <style jsx>{`
+          .loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            gap: 1rem;
+          }
+          .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #e9ecef;
+            border-top-color: #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+          }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -191,12 +232,11 @@ export default function AdminDashboard() {
   return (
     <>
       <div className="dashboard-container">
-        {/* Header */}
         <header className="dashboard-header">
           <div className="header-content">
             <div>
               <h1>📊 Admin Dashboard</h1>
-              <p className="subtitle">Selamat datang, {user?.name}</p>
+              
             </div>
             <Link href="/">
               <button className="btn-back">← Kembali ke Home</button>
@@ -204,13 +244,13 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* Stats Cards */}
         <div className="stats-grid">
           <div className="stat-card stat-blue">
             <div className="stat-icon">💰</div>
             <div className="stat-info">
-              <p className="stat-label">Total Revenue</p>
+              <p className="stat-label">Total Revenue (Paid)</p>
               <h2 className="stat-value">{formatCurrency(analytics.totalRevenue)}</h2>
+              <small className="stat-note">Avg: {formatCurrency(analytics.averageOrderValue)}/order</small>
             </div>
           </div>
 
@@ -219,6 +259,7 @@ export default function AdminDashboard() {
             <div className="stat-info">
               <p className="stat-label">Total Orders</p>
               <h2 className="stat-value">{analytics.totalOrders}</h2>
+              <small className="stat-note">{analytics.paidOrders} lunas, {analytics.pendingPayments} pending</small>
             </div>
           </div>
 
@@ -227,31 +268,38 @@ export default function AdminDashboard() {
             <div className="stat-info">
               <p className="stat-label">Pending Payments</p>
               <h2 className="stat-value">{analytics.pendingPayments}</h2>
+              <small className="stat-note">Conversion: {analytics.conversionRate}</small>
             </div>
           </div>
 
           <div className="stat-card stat-purple">
-            <div className="stat-icon">📦</div>
+            <div className="stat-icon">🛍️</div>
             <div className="stat-info">
               <p className="stat-label">Total Products</p>
               <h2 className="stat-value">{products.length}</h2>
+              <small className="stat-note">Aktif di katalog</small>
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="tabs-container">
+          <button
+            className={`tab ${activeTab === 'overview' ? 'tab-active' : ''}`}
+            onClick={() => setActiveTab('overview')}
+          >
+            📊 Overview
+          </button>
           <button
             className={`tab ${activeTab === 'orders' ? 'tab-active' : ''}`}
             onClick={() => setActiveTab('orders')}
           >
-            📋 Orders
+            📋 Orders ({orders.length})
           </button>
           <button
             className={`tab ${activeTab === 'products' ? 'tab-active' : ''}`}
             onClick={() => setActiveTab('products')}
           >
-            🛍️ Products
+            🛍️ Products ({products.length})
           </button>
           <button
             className={`tab ${activeTab === 'analytics' ? 'tab-active' : ''}`}
@@ -261,8 +309,48 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* Content */}
         <div className="content-container">
+          {/* Overview Tab */}
+          {activeTab === 'overview' && (
+            <div className="overview-section">
+              <h2 className="section-title">📊 Dashboard Overview</h2>
+              
+              <div className="overview-grid">
+                <div className="overview-card">
+                  <h3>🔥 Recent Orders (5 Terakhir)</h3>
+                  {orders.slice(0, 5).map(order => (
+                    <div key={order._id} className="mini-order-card">
+                      <div>
+                        <strong>{order.customerEmail}</strong>
+                        <p className="text-sm">{formatCurrency(order.amount)}</p>
+                      </div>
+                      <span className={`badge ${getStatusBadge(order.status).class}`}>
+                        {getStatusBadge(order.status).text}
+                      </span>
+                    </div>
+                  ))}
+                  {orders.length === 0 && <p className="empty-text">Belum ada order</p>}
+                </div>
+
+                <div className="overview-card">
+                  <h3>📈 Top 5 Products</h3>
+                  {analytics.topProducts?.slice(0, 5).map((product, idx) => (
+                    <div key={idx} className="mini-product-card">
+                      <div>
+                        <strong>{product.name}</strong>
+                        <p className="text-sm">{product.qty} terjual</p>
+                      </div>
+                      <span className="revenue-text">{formatCurrency(product.revenue)}</span>
+                    </div>
+                  ))}
+                  {(!analytics.topProducts || analytics.topProducts.length === 0) && (
+                    <p className="empty-text">Belum ada data penjualan</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Orders Tab */}
           {activeTab === 'orders' && (
             <div className="orders-section">
@@ -283,33 +371,41 @@ export default function AdminDashboard() {
                         <th>Products</th>
                         <th>Total</th>
                         <th>Status</th>
+                        <th>Payment Method</th>
                         <th>Date</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {orders.map((order) => (
-                        <tr key={order._id}>
-                          <td className="mono">{order.orderId || order._id.slice(-8)}</td>
-                          <td>
-                            <div>{order.customerName}</div>
-                            <small>{order.customerEmail}</small>
-                          </td>
-                          <td>
-                            {order.items?.map((item, idx) => (
-                              <div key={idx} className="order-item">
-                                {item.name} x{item.quantity}
+                      {orders.map((order) => {
+                        const statusInfo = getStatusBadge(order.status);
+                        return (
+                          <tr key={order._id}>
+                            <td className="mono">{order.orderId}</td>
+                            <td>
+                              <div className="customer-info">
+                                <strong>{order.customerName}</strong>
+                                <br />
+                                <small>{order.customerEmail}</small>
                               </div>
-                            ))}
-                          </td>
-                          <td className="amount">{formatCurrency(order.amount)}</td>
-                          <td>
-                            <span className={`status-badge status-${order.status}`}>
-                              {order.status === 'paid' ? '✅ Paid' : '⏳ Pending'}
-                            </span>
-                          </td>
-                          <td>{formatDate(order.createdAt)}</td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td>
+                              {order.items?.map((item, idx) => (
+                                <div key={idx} className="order-item">
+                                  {item.name} x{item.qty || item.quantity || 1}
+                                </div>
+                              ))}
+                            </td>
+                            <td className="amount">{formatCurrency(order.amount)}</td>
+                            <td>
+                              <span className={`status-badge ${statusInfo.class}`}>
+                                {statusInfo.text}
+                              </span>
+                            </td>
+                            <td>{order.paymentMethod}</td>
+                            <td className="text-sm">{formatDate(order.createdAt)}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -334,7 +430,6 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              {/* Product Form Modal */}
               {showProductForm && (
                 <div className="modal-overlay" onClick={() => setShowProductForm(false)}>
                   <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -363,6 +458,15 @@ export default function AdminDashboard() {
                       </div>
 
                       <div className="form-group">
+                        <label>Stok</label>
+                        <input
+                          type="number"
+                          value={productForm.stock}
+                          onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="form-group">
                         <label>Deskripsi</label>
                         <textarea
                           value={productForm.description}
@@ -374,20 +478,10 @@ export default function AdminDashboard() {
                       <div className="form-group">
                         <label>URL Gambar</label>
                         <input
-                          type="url"
+                          type="text"
                           value={productForm.image}
                           onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
                           placeholder="https://example.com/image.jpg"
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label>Stok</label>
-                        <input
-                          type="number"
-                          value={productForm.stock}
-                          onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                          required
                         />
                       </div>
 
@@ -415,7 +509,8 @@ export default function AdminDashboard() {
                       <div className="product-info">
                         <h4>{product.name}</h4>
                         <p className="product-price">{formatCurrency(product.price)}</p>
-                        <p className="product-stock">Stok: {product.stock}</p>
+                        <p className="product-stock">Stok: {product.stock || 0}</p>
+                        <p className="product-description">{product.description}</p>
                         <div className="product-actions">
                           <button className="btn-edit" onClick={() => handleEditProduct(product)}>
                             ✏️ Edit
@@ -443,17 +538,27 @@ export default function AdminDashboard() {
                   <div className="chart-placeholder">
                     {analytics.dailyStats.length > 0 ? (
                       <div className="bar-chart">
-                        {analytics.dailyStats.map((stat, idx) => (
-                          <div key={idx} className="bar-item">
-                            <div
-                              className="bar"
-                              style={{ height: `${(stat.revenue / Math.max(...analytics.dailyStats.map(s => s.revenue))) * 100}%` }}
-                            >
-                              <span className="bar-label">{formatCurrency(stat.revenue)}</span>
+                        {analytics.dailyStats.map((stat, idx) => {
+                          const maxRevenue = Math.max(...analytics.dailyStats.map(s => s.revenue));
+                          const height = maxRevenue > 0 ? (stat.revenue / maxRevenue) * 100 : 0;
+                          return (
+                            <div key={idx} className="bar-item">
+                              <div
+                                className="bar"
+                                style={{ height: `${Math.max(height, 10)}%` }}
+                                title={`Revenue: ${formatCurrency(stat.revenue)}`}
+                              >
+                                {stat.revenue > 0 && (
+                                  <span className="bar-label">
+                                    {stat.revenue >= 1000000 ? `${(stat.revenue/1000000).toFixed(1)}jt` : `${(stat.revenue/1000).toFixed(0)}rb`}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="bar-date">{stat.date}</span>
+                              <span className="bar-orders">{stat.paidOrders || 0} orders</span>
                             </div>
-                            <span className="bar-date">{stat.date}</span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="empty-chart">Belum ada data penjualan</p>
@@ -462,15 +567,15 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="chart-card">
-                  <h3>📅 Penjualan Bulanan</h3>
+                  <h3>📅 Penjualan Bulanan (6 Bulan Terakhir)</h3>
                   <div className="chart-placeholder">
-                    {analytics.monthlyStats.length > 0 ? (
+                    {analytics?.monthlyStats?.length > 0 ? (
                       <div className="monthly-stats">
                         {analytics.monthlyStats.map((stat, idx) => (
                           <div key={idx} className="monthly-item">
                             <div className="monthly-month">{stat.month}</div>
                             <div className="monthly-revenue">{formatCurrency(stat.revenue)}</div>
-                            <div className="monthly-orders">{stat.orders} orders</div>
+                            <div className="monthly-orders">{stat.paidOrders} paid / {stat.orders} total</div>
                           </div>
                         ))}
                       </div>
@@ -496,32 +601,10 @@ export default function AdminDashboard() {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
-        .loading-screen {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          min-height: 100vh;
-          gap: 1rem;
-        }
-
-        .spinner {
-          width: 50px;
-          height: 50px;
-          border: 4px solid #e9ecef;
-          border-top-color: #007bff;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
         .dashboard-header {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
-          padding: 2rem;
+          padding: 5rem;
           box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
@@ -614,8 +697,13 @@ export default function AdminDashboard() {
         .stat-value {
           font-size: 1.75rem;
           font-weight: 700;
-          margin: 0;
+          margin: 0 0 0.25rem 0;
           color: #212529;
+        }
+
+        .stat-note {
+          color: #6c757d;
+          font-size: 0.75rem;
         }
 
         .tabs-container {
@@ -675,6 +763,65 @@ export default function AdminDashboard() {
           font-size: 1.1rem;
         }
 
+        .overview-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+          gap: 2rem;
+        }
+
+        .overview-card {
+          background: white;
+          padding: 1.5rem;
+          border-radius: 16px;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .overview-card h3 {
+          margin: 0 0 1rem 0;
+          font-size: 1.1rem;
+          color: #212529;
+        }
+
+        .mini-order-card, .mini-product-card {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.75rem;
+          margin-bottom: 0.5rem;
+          background: #f8f9fa;
+          border-radius: 8px;
+          transition: all 0.2s;
+        }
+
+        .mini-order-card:hover, .mini-product-card:hover {
+          background: #e9ecef;
+        }
+
+        .text-sm {
+          font-size: 0.875rem;
+          color: #6c757d;
+          margin: 0.25rem 0 0 0;
+        }
+
+        .badge {
+          padding: 0.25rem 0.75rem;
+          border-radius: 12px;
+          font-size: 0.75rem;
+          font-weight: 600;
+        }
+
+        .revenue-text {
+          font-weight: 700;
+          color: #28a745;
+        }
+
+        .empty-text {
+          color: #6c757d;
+          font-style: italic;
+          text-align: center;
+          padding: 2rem;
+        }
+
         .table-responsive {
           background: white;
           border-radius: 16px;
@@ -717,6 +864,15 @@ export default function AdminDashboard() {
           color: #6c757d;
         }
 
+        .customer-info strong {
+          display: block;
+          margin-bottom: 0.25rem;
+        }
+
+        .customer-info small {
+          color: #6c757d;
+        }
+
         .order-item {
           font-size: 0.875rem;
           margin-bottom: 0.25rem;
@@ -733,7 +889,6 @@ export default function AdminDashboard() {
           border-radius: 20px;
           font-size: 0.75rem;
           font-weight: 600;
-          text-transform: uppercase;
         }
 
         .status-paid {
@@ -747,7 +902,7 @@ export default function AdminDashboard() {
         }
 
         .btn-primary {
-          background: linear-gradient(135deg, #007bff, #0056b3);
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white;
           border: none;
           padding: 0.75rem 1.5rem;
@@ -755,17 +910,15 @@ export default function AdminDashboard() {
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s;
-          font-size: 0.95rem;
         }
 
         .btn-primary:hover {
           transform: translateY(-2px);
-          box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
 
         .btn-full {
           width: 100%;
-          margin-top: 0.5rem;
         }
 
         .modal-overlay {
@@ -774,7 +927,7 @@ export default function AdminDashboard() {
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.7);
+          background: rgba(0, 0, 0, 0.5);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -784,29 +937,40 @@ export default function AdminDashboard() {
 
         .modal-content {
           background: white;
-          border-radius: 20px;
           padding: 2rem;
+          border-radius: 16px;
           max-width: 500px;
           width: 100%;
-          position: relative;
           max-height: 90vh;
           overflow-y: auto;
+          position: relative;
         }
 
         .modal-close {
           position: absolute;
           top: 1rem;
           right: 1rem;
-          background: none;
+          background: #f8f9fa;
           border: none;
-          font-size: 1.5rem;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
           cursor: pointer;
-          color: #6c757d;
+          font-size: 1.2rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s;
+        }
+
+        .modal-close:hover {
+          background: #e9ecef;
         }
 
         .modal-content h3 {
           margin: 0 0 1.5rem 0;
           font-size: 1.5rem;
+          color: #212529;
         }
 
         .form-group {
@@ -815,9 +979,9 @@ export default function AdminDashboard() {
 
         .form-group label {
           display: block;
-          font-weight: 600;
-          color: #212529;
           margin-bottom: 0.5rem;
+          font-weight: 600;
+          color: #495057;
           font-size: 0.9rem;
         }
 
@@ -826,21 +990,22 @@ export default function AdminDashboard() {
           width: 100%;
           padding: 0.75rem;
           border: 2px solid #e9ecef;
-          border-radius: 10px;
-          font-size: 0.95rem;
+          border-radius: 8px;
+          font-size: 1rem;
           transition: all 0.3s;
+          font-family: inherit;
         }
 
         .form-group input:focus,
         .form-group textarea:focus {
           outline: none;
-          border-color: #007bff;
-          box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         .products-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
           gap: 1.5rem;
         }
 
@@ -849,18 +1014,19 @@ export default function AdminDashboard() {
           border-radius: 16px;
           overflow: hidden;
           box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-          transition: transform 0.3s;
+          transition: all 0.3s;
         }
 
         .product-card:hover {
           transform: translateY(-5px);
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
         }
 
         .product-image {
           width: 100%;
           height: 200px;
           object-fit: cover;
+          background: #f8f9fa;
         }
 
         .product-info {
@@ -883,36 +1049,51 @@ export default function AdminDashboard() {
         .product-stock {
           font-size: 0.875rem;
           color: #6c757d;
-          margin: 0.5rem 0 1rem 0;
+          margin: 0.25rem 0;
+        }
+
+        .product-description {
+          font-size: 0.875rem;
+          color: #6c757d;
+          margin: 0.75rem 0 1rem 0;
+          line-height: 1.5;
         }
 
         .product-actions {
           display: flex;
-          gap: 0.5rem;
+          gap: 0.75rem;
+        }
+
+        .btn-edit,
+        .btn-delete {
+          flex: 1;
+          padding: 0.625rem;
+          border: none;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s;
+          font-size: 0.875rem;
         }
 
         .btn-edit {
-          flex: 1;
-          background: #007bff;
+          background: #e3f2fd;
+          color: #1976d2;
+        }
+
+        .btn-edit:hover {
+          background: #1976d2;
           color: white;
-          border: none;
-          padding: 0.5rem;
-          border-radius: 8px;
-          font-weight: 600;
-          cursor: pointer;
-          font-size: 0.875rem;
         }
 
         .btn-delete {
-          flex: 1;
-          background: #dc3545;
+          background: #ffebee;
+          color: #c62828;
+        }
+
+        .btn-delete:hover {
+          background: #c62828;
           color: white;
-          border: none;
-          padding: 0.5rem;
-          border-radius: 8px;
-          font-weight: 600;
-          cursor: pointer;
-          font-size: 0.875rem;
         }
 
         .chart-grid {
@@ -923,36 +1104,28 @@ export default function AdminDashboard() {
 
         .chart-card {
           background: white;
-          padding: 2rem;
+          padding: 1.5rem;
           border-radius: 16px;
           box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
 
         .chart-card h3 {
           margin: 0 0 1.5rem 0;
-          font-size: 1.25rem;
+          font-size: 1.1rem;
           color: #212529;
         }
 
         .chart-placeholder {
-          min-height: 250px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .empty-chart {
-          color: #6c757d;
-          font-style: italic;
+          min-height: 300px;
         }
 
         .bar-chart {
           display: flex;
           align-items: flex-end;
-          justify-content: space-around;
-          height: 250px;
-          width: 100%;
+          justify-content: space-between;
+          height: 300px;
           gap: 0.5rem;
+          padding: 1rem 0;
         }
 
         .bar-item {
@@ -965,31 +1138,38 @@ export default function AdminDashboard() {
 
         .bar {
           width: 100%;
-          background: linear-gradient(135deg, #007bff, #0056b3);
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           border-radius: 8px 8px 0 0;
           position: relative;
-          min-height: 30px;
-          display: flex;
-          align-items: flex-start;
-          justify-content: center;
-          padding-top: 0.5rem;
           transition: all 0.3s;
+          cursor: pointer;
+          min-height: 20px;
         }
 
         .bar:hover {
-          background: linear-gradient(135deg, #0056b3, #004085);
+          opacity: 0.8;
         }
 
         .bar-label {
-          font-size: 0.75rem;
+          position: absolute;
+          top: -25px;
+          left: 50%;
+          transform: translateX(-50%);
+          font-size: 0.7rem;
           font-weight: 600;
-          color: white;
+          color: #495057;
+          white-space: nowrap;
         }
 
         .bar-date {
           font-size: 0.75rem;
           color: #6c757d;
-          text-align: center;
+          font-weight: 600;
+        }
+
+        .bar-orders {
+          font-size: 0.7rem;
+          color: #6c757d;
         }
 
         .monthly-stats {
@@ -1004,24 +1184,24 @@ export default function AdminDashboard() {
           align-items: center;
           padding: 1rem;
           background: #f8f9fa;
-          border-radius: 10px;
-          transition: all 0.3s;
+          border-radius: 8px;
+          transition: all 0.2s;
         }
 
         .monthly-item:hover {
           background: #e9ecef;
-          transform: translateX(5px);
         }
 
         .monthly-month {
           font-weight: 600;
           color: #212529;
+          min-width: 100px;
         }
 
         .monthly-revenue {
-          font-size: 1.1rem;
           font-weight: 700;
           color: #28a745;
+          font-size: 1.1rem;
         }
 
         .monthly-orders {
@@ -1029,29 +1209,54 @@ export default function AdminDashboard() {
           color: #6c757d;
         }
 
-        @media (max-width: 768px) {
-          .dashboard-header {
-            padding: 1.5rem 1rem;
-          }
+        .empty-chart {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 300px;
+          color: #6c757d;
+          font-style: italic;
+        }
 
+        @media (max-width: 768px) {
           .header-content {
             flex-direction: column;
             gap: 1rem;
-            align-items: flex-start;
+            text-align: center;
           }
 
           .stats-grid {
-            padding: 0 1rem;
             grid-template-columns: 1fr;
+            margin-top: 1rem;
           }
 
           .tabs-container {
-            padding: 0 1rem;
             overflow-x: auto;
+            padding-bottom: 0.5rem;
           }
 
-          .content-container {
-            padding: 0 1rem 2rem 1rem;
+          .tab {
+            white-space: nowrap;
+          }
+
+          .overview-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .table-responsive {
+            overflow-x: scroll;
+          }
+
+          .products-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .chart-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .bar-chart {
+            overflow-x: auto;
           }
 
           .section-header {
@@ -1060,23 +1265,12 @@ export default function AdminDashboard() {
             gap: 1rem;
           }
 
-          .table-responsive {
-            overflow-x: scroll;
-          }
-
-          .data-table {
-            min-width: 800px;
-          }
-
-          .chart-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .products-grid {
-            grid-template-columns: 1fr;
+          .btn-primary {
+            width: 100%;
           }
         }
       `}</style>
     </>
   );
 }
+

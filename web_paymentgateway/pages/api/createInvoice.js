@@ -1,9 +1,12 @@
 import { Xendit } from "xendit-node";
+import dbConnect from "../../lib/mongodb";
+import Checkout from "../../models/Checkout";
 
 const x = new Xendit({ secretKey: process.env.XENDIT_SECRET_KEY });
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
+  if (req.method !== "POST")
+    return res.status(405).json({ message: "Method not allowed" });
 
   const { amount, description, email } = req.body;
 
@@ -12,30 +15,38 @@ export default async function handler(req, res) {
   }
 
   try {
+    await dbConnect();
+
     const payload = {
       externalId: "order-" + Date.now(),
       amount: Number(amount),
       description: description || "Pembayaran produk",
       payerEmail: email || "test@example.com",
-      successRedirectUrl: "http://localhost:3000/payment-success",
-      failureRedirectUrl: "http://localhost:3000/payment-failed",
+      successRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/success`,
+      failureRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/failed`,
     };
 
-    console.log("Payload ke Xendit v7:", payload);
-
-    // ❌ Jangan destructuring, cukup panggil langsung
     const invoice = await x.Invoice.createInvoice({ data: payload });
 
-    console.log("Invoice created:", invoice);
+    const checkout = await Checkout.create({
+      email: invoice.payerEmail,
+      total: invoice.amount,
+      status: "PENDING",
+      external_id: invoice.externalId,
+      xendit_invoice_id: invoice.id,
+      invoice_url: (invoice.invoiceUrl || "").trim(),
+    });
 
-    res.status(200).json({
-      invoiceUrl: invoice.invoiceUrl, // ini yang frontend pakai
-      externalId: invoice.externalId,
-      id: invoice.id,
-      
+    return res.status(200).json({
+      success: true,
+      invoiceUrl: invoice.invoiceUrl,
+      checkoutId: checkout._id,
     });
   } catch (err) {
     console.error("❌ Error create invoice:", err.response?.data || err);
-    res.status(500).json({ error: "Gagal membuat invoice", detail: err.response?.data || err.message });
+    res.status(500).json({
+      error: "Gagal membuat invoice",
+      detail: err.response?.data || err.message,
+    });
   }
 }

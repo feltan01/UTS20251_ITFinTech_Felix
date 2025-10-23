@@ -133,8 +133,13 @@ export default function Home() {
       setFormData(prev => ({ ...prev, mfaCode: '' }));
       alert('✅ Login berhasil!');
 
+      // Navigasi berdasarkan role
       if (pendingAuth.role === 'admin') {
         router.push('/admin/dashboard');
+      } else if (pendingAuth.role === 'buyer') {
+        router.push('/buyer/home'); // bisa ganti sesuai path buyer
+      } else {
+        router.push('/'); // default
       }
     }
   } catch (err) {
@@ -144,6 +149,7 @@ export default function Home() {
     setLoading(false);
   }
 };
+
 
 
   const handleLogout = () => {

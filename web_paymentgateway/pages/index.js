@@ -101,56 +101,54 @@ export default function Home() {
   };
 
   const handleVerifyMFA = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  setError('');
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-  if (!pendingAuth?.email) {
-    setError('Email user tidak ditemukan, login ulang');
-    setLoading(false);
-    return;
-  }
-
-  try {
-    const res = await fetch('/api/auth/verify-mfa', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: pendingAuth.email,
-        code: formData.mfaCode
-      })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      setError(data.error || 'Kode verifikasi salah');
-    } else {
-      localStorage.setItem('user', JSON.stringify(pendingAuth));
-      setUser(pendingAuth);
-      setShowAuth(false);
-      setShowMFA(false);
-      setFormData(prev => ({ ...prev, mfaCode: '' }));
-      alert('✅ Login berhasil!');
-
-      // Navigasi berdasarkan role
-      if (pendingAuth.role === 'admin') {
-        router.push('/admin/dashboard');
-      } else if (pendingAuth.role === 'buyer') {
-        router.push('/buyer/home'); // bisa ganti sesuai path buyer
-      } else {
-        router.push('/'); // default
-      }
+    if (!pendingAuth?.email) {
+      setError('Email user tidak ditemukan, login ulang');
+      setLoading(false);
+      return;
     }
-  } catch (err) {
-    console.error(err);
-    setError('Terjadi kesalahan. Coba lagi.');
-  } finally {
-    setLoading(false);
-  }
-};
 
+    try {
+      const res = await fetch('/api/auth/verify-mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: pendingAuth.email,
+          code: formData.mfaCode
+        })
+      });
 
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Kode verifikasi salah');
+      } else {
+        localStorage.setItem('user', JSON.stringify(pendingAuth));
+        setUser(pendingAuth);
+        setShowAuth(false);
+        setShowMFA(false);
+        setFormData(prev => ({ ...prev, mfaCode: '' }));
+        alert('✅ Login berhasil!');
+
+        // Navigasi berdasarkan role
+        if (pendingAuth.role === 'admin') {
+          router.push('/admin/dashboard');
+        } else if (pendingAuth.role === 'buyer') {
+          router.push('/buyer/home');
+        } else {
+          router.push('/');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Terjadi kesalahan. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('user');
@@ -330,17 +328,9 @@ export default function Home() {
             <p className="card-description">
               Pilih produk yang ingin dibeli dan masukkan ke keranjang
             </p>
-            <Link href={user ? "/select-items" : "#"}>
-              <button
-                className="btn btn-primary"
-                onClick={(e) => {
-                  if (!user) {
-                    e.preventDefault(); // cegah navigasi
-                    setShowAuth(true); // tampilkan modal login
-                    setAuthMode("login"); // pastikan modal dalam mode login
-                  }
-                }}
-              >
+            {/* ✅ PERUBAHAN: Hapus pengecekan user, langsung bisa akses */}
+            <Link href="/select-items">
+              <button className="btn btn-primary">
                 <span className="btn-text">Mulai Belanja</span>
                 <span className="btn-icon">🚀</span>
               </button>
